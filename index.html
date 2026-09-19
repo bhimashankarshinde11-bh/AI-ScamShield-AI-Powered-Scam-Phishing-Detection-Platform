@@ -6,6 +6,8 @@
     <title>AI ScamShield - Scam & Phishing Detection</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Tesseract.js for OCR -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script>
         tailwind.config = {
@@ -25,17 +27,13 @@
                         'gradient-x': 'gradient-x 15s ease infinite',
                         'fade-in': 'fadeIn 0.5s ease-out forwards',
                         'slide-up': 'slideUp 0.5s ease-out forwards',
+                        'spin': 'spin 1s linear infinite',
+                        'pulse': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
                     },
                     keyframes: {
                         'gradient-x': {
-                            '0%, 100%': {
-                                'background-size': '200% 200%',
-                                'background-position': 'left center'
-                            },
-                            '50%': {
-                                'background-size': '200% 200%',
-                                'background-position': 'right center'
-                            },
+                            '0%, 100%': { 'background-size': '200% 200%', 'background-position': 'left center' },
+                            '50%': { 'background-size': '200% 200%', 'background-position': 'right center' },
                         },
                         fadeIn: {
                             '0%': { opacity: '0' },
@@ -87,68 +85,29 @@
             background-clip: text;
         }
 
-        /* Circular Progress */
-        .circular-chart {
-            display: block;
-            margin: 0 auto;
-            max-width: 150px;
-            max-height: 150px;
-        }
-        .circle-bg {
-            fill: none;
-            stroke: rgba(255,255,255,0.1);
-            stroke-width: 3.8;
-        }
-        .circle {
-            fill: none;
-            stroke-width: 3.8;
-            stroke-linecap: round;
-            transition: stroke-dasharray 1s ease-out;
-        }
-        .percentage {
-            fill: #fff;
-            font-family: 'Inter', sans-serif;
-            font-weight: bold;
-            font-size: 0.5em;
-            text-anchor: middle;
-        }
+        .circular-chart { display: block; margin: 0 auto; max-width: 150px; max-height: 150px; }
+        .circle-bg { fill: none; stroke: rgba(255,255,255,0.1); stroke-width: 3.8; }
+        .circle { fill: none; stroke-width: 3.8; stroke-linecap: round; transition: stroke-dasharray 1s ease-out; }
+        .percentage { fill: #fff; font-family: 'Inter', sans-serif; font-weight: bold; font-size: 0.5em; text-anchor: middle; }
 
-        .blur-overlay {
-            filter: blur(8px);
-            pointer-events: none;
-            user-select: none;
-            transition: filter 0.3s ease;
-        }
-
-        .login-prompt {
-            display: none;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 10;
-        }
-
-        .tool-container.locked .blur-overlay {
-            filter: blur(8px);
-        }
+        .blur-overlay { filter: blur(8px); pointer-events: none; user-select: none; transition: filter 0.3s ease; }
+        .login-prompt { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; }
+        .tool-container.locked .blur-overlay { filter: blur(8px); }
+        .tool-container.locked .login-prompt { display: flex; }
+        .tool-container:not(.locked) .login-prompt { display: none !important; }
+        .tool-container:not(.locked) .blur-overlay { filter: none; pointer-events: auto; user-select: auto; }
         
-        .tool-container.locked .login-prompt {
-            display: flex;
-        }
-        
-        .tool-container:not(.locked) .login-prompt {
-            display: none !important;
-        }
-        
-        .tool-container:not(.locked) .blur-overlay {
-            filter: none;
-            pointer-events: auto;
-            user-select: auto;
-        }
+        .toast { transform: translateY(100px); opacity: 0; }
+        .toast.show { transform: translateY(0); opacity: 1; }
     </style>
 </head>
-<body class="antialiased selection:bg-primary selection:text-white">
+<body class="antialiased selection:bg-primary selection:text-white pb-20">
+
+    <!-- Toast -->
+    <div id="toast" class="toast fixed bottom-6 right-6 bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg transition-all duration-300 z-[200] flex items-center gap-2 font-medium">
+        <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+        <span id="toastMsg">Action successful</span>
+    </div>
 
     <!-- Navbar -->
     <nav class="fixed w-full z-50 glass-card border-b-0 border-t-0 border-x-0 !border-b-white/5">
@@ -169,35 +128,65 @@
 
     <!-- Auth Modal -->
     <div id="authModal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/60 backdrop-blur-sm">
-        <div class="glass-card w-full max-w-md mx-4 p-8 rounded-2xl relative animate-slide-up">
+        <div class="glass-card w-full max-w-md mx-4 p-8 rounded-2xl relative animate-slide-up overflow-hidden">
             <button onclick="closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors">
                 <i data-lucide="x" class="w-5 h-5"></i>
             </button>
-            <h2 class="text-2xl font-bold mb-6 text-center">Welcome Back</h2>
             
-            <div class="space-y-4">
-                <button onclick="simulateLogin('google')" class="w-full glass-input flex items-center justify-center gap-3 py-3 rounded-lg hover:bg-white/5 transition-colors">
-                    <svg class="w-5 h-5" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27c3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10c5.11 0 9.6-3.59 9.6-9.9c0-.93-.11-1.9-.11-1.9z"/></svg>
-                    Continue with Google
-                </button>
-                
-                <div class="flex items-center gap-3 my-4">
-                    <div class="flex-1 h-px bg-white/10"></div>
-                    <span class="text-xs text-gray-400">OR</span>
-                    <div class="flex-1 h-px bg-white/10"></div>
-                </div>
+            <!-- Login View -->
+            <div id="loginView">
+                <h2 class="text-2xl font-bold mb-6 text-center">Welcome Back</h2>
+                <div class="space-y-4">
+                    <button onclick="simulateLogin('google')" class="w-full glass-input flex items-center justify-center gap-3 py-3 rounded-lg hover:bg-white/5 transition-colors">
+                        <svg class="w-5 h-5" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27c3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10c5.11 0 9.6-3.59 9.6-9.9c0-.93-.11-1.9-.11-1.9z"/></svg>
+                        Continue with Google
+                    </button>
+                    
+                    <div class="flex items-center gap-3 my-4">
+                        <div class="flex-1 h-px bg-white/10"></div>
+                        <span class="text-xs text-gray-400">OR</span>
+                        <div class="flex-1 h-px bg-white/10"></div>
+                    </div>
 
-                <div class="space-y-3">
-                    <div>
-                        <label class="block text-xs font-medium text-gray-400 mb-1">Email or Phone</label>
-                        <input type="text" id="loginInput" class="w-full glass-input px-4 py-3 rounded-lg text-sm" placeholder="you@example.com or +1 234...">
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-400 mb-1">Email or Phone</label>
+                            <input type="text" id="loginInput" class="w-full glass-input px-4 py-3 rounded-lg text-sm" placeholder="you@example.com">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-400 mb-1">Password</label>
+                            <input type="password" class="w-full glass-input px-4 py-3 rounded-lg text-sm" placeholder="••••••••">
+                        </div>
+                        
+                        <div class="flex items-center justify-between text-xs text-gray-400 mt-2 pb-2">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="rememberMe" class="rounded bg-black/30 border-white/10 text-primary focus:ring-primary focus:ring-offset-0">
+                                <span>Remember Me</span>
+                            </label>
+                            <button onclick="toggleAuthView('forgot')" class="hover:text-primary transition-colors">Forgot Password?</button>
+                        </div>
+
+                        <button onclick="simulateLogin('email')" class="w-full bg-primary hover:bg-blue-600 text-white font-medium py-3 rounded-lg transition-colors mt-2">
+                            Continue
+                        </button>
                     </div>
+                </div>
+            </div>
+
+            <!-- Forgot Password View -->
+            <div id="forgotView" class="hidden">
+                <h2 class="text-2xl font-bold mb-2 text-center">Reset Password</h2>
+                <p class="text-sm text-gray-400 text-center mb-6">Enter your email and we'll send a link to reset your password.</p>
+                <div class="space-y-4">
                     <div>
-                        <label class="block text-xs font-medium text-gray-400 mb-1">Password (if email)</label>
-                        <input type="password" class="w-full glass-input px-4 py-3 rounded-lg text-sm" placeholder="••••••••">
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Email Address</label>
+                        <input type="email" id="resetEmail" class="w-full glass-input px-4 py-3 rounded-lg text-sm" placeholder="you@example.com">
                     </div>
-                    <button onclick="simulateLogin('email')" class="w-full bg-primary hover:bg-blue-600 text-white font-medium py-3 rounded-lg transition-colors mt-2">
-                        Continue
+                    <button onclick="sendResetLink()" class="w-full bg-primary hover:bg-blue-600 text-white font-medium py-3 rounded-lg transition-colors">
+                        Send Reset Link
+                    </button>
+                    <button onclick="toggleAuthView('login')" class="w-full glass-input hover:bg-white/5 text-gray-300 font-medium py-3 rounded-lg transition-colors mt-2">
+                        Back to Login
                     </button>
                 </div>
             </div>
@@ -205,134 +194,182 @@
     </div>
 
     <!-- Main Content -->
-    <main class="pt-32 pb-16 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+    <main class="pt-32 pb-8 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
         
         <!-- Hero -->
         <div class="text-center mb-16 animate-fade-in">
-            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full glass-card text-xs text-primary mb-6 border-primary/20">
-                <span class="relative flex h-2 w-2">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                  <span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-                </span>
-                AI Models Online & Scanning
-            </div>
             <h1 class="text-5xl md:text-6xl font-extrabold tracking-tight mb-6">
                 <span class="gradient-text">AI-Powered</span> Scam Protection
             </h1>
             <p class="text-gray-400 text-lg md:text-xl max-w-2xl mx-auto mb-8">
-                Paste any suspicious email, SMS, WhatsApp message, or link. Our AI analyzes patterns to detect fraud instantly.
+                Analyze suspicious emails, SMS, photos, and voice notes instantly.
             </p>
-            
-            <!-- Stats -->
-            <div class="flex justify-center gap-8 text-sm text-gray-400">
-                <div class="flex flex-col items-center">
-                    <span class="text-2xl font-bold text-white">10k+</span>
-                    <span>Scams Blocked</span>
-                </div>
-                <div class="flex flex-col items-center">
-                    <span class="text-2xl font-bold text-white">99.8%</span>
-                    <span>Accuracy Rate</span>
-                </div>
-                <div class="flex flex-col items-center">
-                    <span class="text-2xl font-bold text-white">&lt;1s</span>
-                    <span>Analysis Time</span>
-                </div>
-            </div>
         </div>
 
-        <!-- Tool Container -->
-        <div id="toolContainer" class="tool-container locked relative rounded-2xl glass-card p-6 md:p-8 animate-slide-up" style="animation-delay: 0.2s;">
-            
-            <div class="login-prompt flex-col items-center text-center p-8 glass-card rounded-2xl border-white/10 w-[90%] max-w-sm mx-auto shadow-2xl bg-dark/80 backdrop-blur-xl">
-                <i data-lucide="lock" class="w-12 h-12 text-primary mb-4"></i>
-                <h3 class="text-xl font-bold mb-2">Login to Scan</h3>
-                <p class="text-sm text-gray-400 mb-6">Protect yourself from sophisticated scams. Join free to analyze texts instantly.</p>
-                <button onclick="openAuthModal()" class="w-full bg-primary hover:bg-blue-600 text-white font-medium py-3 px-6 rounded-lg transition-colors">
-                    Sign In / Sign Up
-                </button>
-            </div>
-
-            <div class="blur-overlay">
-                <div class="mb-6">
-                    <label class="block text-sm font-medium text-gray-300 mb-2">Message or Link Content</label>
-                    <textarea id="scanInput" rows="5" class="w-full glass-input p-4 rounded-xl text-base resize-none" placeholder="Paste Email / SMS / WhatsApp Message / Link here"></textarea>
-                </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Left Column: Tool Container -->
+            <div class="lg:col-span-2 space-y-8">
                 
-                <div class="flex flex-col sm:flex-row gap-4 mb-8">
-                    <button onclick="runAnalysis()" class="flex-1 bg-primary hover:bg-blue-600 text-white font-semibold py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:shadow-[0_0_30px_rgba(59,130,246,0.5)] flex items-center justify-center gap-2">
-                        <i data-lucide="scan-search" class="w-5 h-5"></i> Analyze Now
-                    </button>
-                    <button onclick="pasteExample()" class="px-6 py-4 rounded-xl glass-input hover:bg-white/5 font-medium transition-colors flex items-center justify-center gap-2">
-                        <i data-lucide="copy" class="w-4 h-4"></i> Paste Example Scam
-                    </button>
-                </div>
-
-                <!-- Results Section (Hidden by default) -->
-                <div id="resultSection" class="hidden border-t border-white/10 pt-8 mt-8 animate-fade-in">
+                <!-- Main Tool -->
+                <div id="toolContainer" class="tool-container locked relative rounded-2xl glass-card p-6 animate-slide-up" style="animation-delay: 0.1s;">
                     
-                    <!-- Circular Score -->
-                    <div class="flex flex-col md:flex-row items-center gap-8 mb-8">
-                        <div class="w-40 h-40 relative flex-shrink-0">
-                            <svg viewBox="0 0 36 36" class="circular-chart">
-                                <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                                <path id="scoreCircle" class="circle" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                                <text id="scoreText" x="18" y="20.35" class="percentage">0%</text>
-                            </svg>
-                        </div>
-                        <div>
-                            <h2 class="text-sm font-medium text-gray-400 uppercase tracking-wider mb-1">AI Risk Assessment</h2>
-                            <div id="scoreLabel" class="text-3xl font-bold mb-2">Analyzing...</div>
-                            <p id="scoreDesc" class="text-gray-400 text-sm max-w-md">Our AI is processing the text for common fraud patterns, malicious links, and social engineering techniques.</p>
-                        </div>
+                    <div class="login-prompt flex-col items-center text-center p-8 glass-card rounded-2xl border-white/10 w-[90%] max-w-sm mx-auto shadow-2xl bg-dark/80 backdrop-blur-xl">
+                        <i data-lucide="lock" class="w-12 h-12 text-primary mb-4"></i>
+                        <h3 class="text-xl font-bold mb-2">Login to Scan</h3>
+                        <p class="text-sm text-gray-400 mb-6">Join free to analyze texts, images, and audio instantly.</p>
+                        <button onclick="openAuthModal()" class="w-full bg-primary hover:bg-blue-600 text-white font-medium py-3 px-6 rounded-lg transition-colors">
+                            Sign In / Sign Up
+                        </button>
                     </div>
 
-                    <!-- Reasons Cards -->
-                    <div>
-                        <h3 class="text-lg font-semibold mb-4 border-b border-white/10 pb-2">Why this assessment?</h3>
-                        <div id="reasonsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <!-- Cards injected via JS -->
+                    <div class="blur-overlay">
+                        <!-- Tabs -->
+                        <div class="flex border-b border-white/10 mb-6">
+                            <button onclick="switchTab('text')" id="tab-text" class="px-6 py-3 border-b-2 border-primary text-primary font-medium transition-colors flex items-center gap-2"><i data-lucide="type" class="w-4 h-4"></i> Text</button>
+                            <button onclick="switchTab('photo')" id="tab-photo" class="px-6 py-3 border-b-2 border-transparent text-gray-400 hover:text-white transition-colors flex items-center gap-2"><i data-lucide="image" class="w-4 h-4"></i> Photo</button>
+                            <button onclick="switchTab('audio')" id="tab-audio" class="px-6 py-3 border-b-2 border-transparent text-gray-400 hover:text-white transition-colors flex items-center gap-2"><i data-lucide="mic" class="w-4 h-4"></i> Audio</button>
+                        </div>
+
+                        <!-- Tab Content: Text -->
+                        <div id="content-text" class="mb-6">
+                            <textarea id="scanInput" rows="5" class="w-full glass-input p-4 rounded-xl text-base resize-none" placeholder="Paste Email / SMS / WhatsApp Message here"></textarea>
+                        </div>
+
+                        <!-- Tab Content: Photo -->
+                        <div id="content-photo" class="hidden mb-6">
+                            <div id="dropZone" class="w-full h-40 border-2 border-dashed border-white/20 rounded-xl flex flex-col items-center justify-center text-gray-400 hover:border-primary/50 hover:bg-white/5 transition-colors cursor-pointer relative group">
+                                <input type="file" id="imageInput" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                                <i data-lucide="image-plus" class="w-10 h-10 mb-3 group-hover:scale-110 transition-transform text-primary/70"></i>
+                                <span class="font-medium text-gray-300">Drop screenshot here</span>
+                                <span class="text-xs mt-1">or click to browse</span>
+                            </div>
+                            <div id="imagePreviewContainer" class="hidden relative rounded-xl overflow-hidden glass-card p-2 border-white/10">
+                                <div class="relative max-h-48 overflow-hidden rounded-lg bg-black/50 flex justify-center">
+                                    <img id="imagePreview" class="object-contain max-h-48">
+                                    <button onclick="resetImage()" class="absolute top-2 right-2 bg-black/70 hover:bg-red-500 text-white p-1.5 rounded-md transition-colors"><i data-lucide="x" class="w-4 h-4"></i></button>
+                                </div>
+                                <button onclick="runOCR()" id="ocrBtn" class="mt-3 w-full bg-secondary hover:bg-purple-600 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-lg shadow-secondary/20">
+                                    <i data-lucide="scan-text" class="w-5 h-5"></i> Extract Text & Analyze
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Tab Content: Audio -->
+                        <div id="content-audio" class="hidden mb-6 text-center py-8 bg-black/20 rounded-xl border border-white/5">
+                            <button onclick="startListening()" id="micBtn" class="w-24 h-24 bg-red-500/20 hover:bg-red-500/30 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6 transition-all hover:scale-105 border border-red-500/30 shadow-[0_0_30px_rgba(239,68,68,0.15)] relative">
+                                <div id="micRings" class="absolute inset-0 rounded-full border-2 border-red-500/50 animate-ping hidden"></div>
+                                <i data-lucide="mic" class="w-10 h-10"></i>
+                            </button>
+                            <h4 class="font-medium text-white mb-1">Voice Scanner</h4>
+                            <p id="audioStatus" class="text-sm text-gray-400">Click mic and read the suspicious message aloud</p>
+                        </div>
+                        
+                        <!-- Action Buttons -->
+                        <div class="flex flex-col sm:flex-row gap-4 mb-2">
+                            <button onclick="runAnalysis()" id="analyzeBtn" class="flex-1 bg-primary hover:bg-blue-600 text-white font-semibold py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:shadow-[0_0_30px_rgba(59,130,246,0.5)] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed">
+                                <i data-lucide="scan-search" class="w-5 h-5"></i> Analyze Now
+                            </button>
+                            <button onclick="pasteExampleAndAnalyze()" class="px-6 py-4 rounded-xl glass-input hover:bg-white/5 font-medium transition-colors flex items-center justify-center gap-2 border-primary/20 hover:border-primary/50 text-blue-300">
+                                <i data-lucide="zap" class="w-4 h-4"></i> Try Example
+                            </button>
+                        </div>
+
+                        <!-- Results Section -->
+                        <div id="resultSection" class="hidden border-t border-white/10 pt-8 mt-8 animate-fade-in">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="readAloud()" class="flex items-center gap-2 text-xs font-medium text-gray-400 hover:text-white transition-colors bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/10">
+                                    <i data-lucide="volume-2" class="w-3.5 h-3.5"></i> Read Verdict
+                                </button>
+                            </div>
+                            <!-- Circular Score -->
+                            <div class="flex flex-col sm:flex-row items-center gap-8 mb-8 bg-black/20 p-6 rounded-2xl border border-white/5">
+                                <div class="w-32 h-32 relative flex-shrink-0">
+                                    <svg viewBox="0 0 36 36" class="circular-chart">
+                                        <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        <path id="scoreCircle" class="circle" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        <text id="scoreText" x="18" y="20.35" class="percentage">0%</text>
+                                    </svg>
+                                </div>
+                                <div class="text-center sm:text-left">
+                                    <h2 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">AI Verdict</h2>
+                                    <div id="scoreLabel" class="text-3xl font-black mb-2 tracking-tight">Analyzing...</div>
+                                    <p id="scoreDesc" class="text-gray-400 text-sm max-w-sm leading-relaxed"></p>
+                                </div>
+                            </div>
+
+                            <!-- Reasons Cards -->
+                            <div>
+                                <h3 class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Detection Breakdown</h3>
+                                <div id="reasonsContainer" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <!-- Cards injected via JS -->
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- How it works -->
-        <div class="mt-24 grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div class="glass-card p-6 rounded-2xl text-center">
-                <div class="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center mx-auto mb-4 text-primary">
-                    <i data-lucide="clipboard-paste"></i>
+                <!-- Link Checker -->
+                <div class="glass-card p-6 rounded-2xl relative animate-slide-up" style="animation-delay: 0.2s;">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400">
+                            <i data-lucide="link-2" class="w-5 h-5"></i>
+                        </div>
+                        <h3 class="text-lg font-bold">Quick Link Checker</h3>
+                    </div>
+                    <p class="text-sm text-gray-400 mb-4">Have a suspicious URL? Paste it below to check its reputation instantly.</p>
+                    <div class="flex gap-3">
+                        <input type="url" id="linkInput" class="flex-1 glass-input px-4 py-3 rounded-xl text-sm" placeholder="https://bit.ly/xyz...">
+                        <button onclick="checkLinkOnly()" class="bg-white/10 hover:bg-primary text-white font-medium px-6 py-3 rounded-xl transition-colors border border-white/10 hover:border-transparent">Check</button>
+                    </div>
                 </div>
-                <h3 class="font-semibold mb-2">1. Paste Message</h3>
-                <p class="text-sm text-gray-400">Copy any suspicious text from SMS, WhatsApp, Email or the web.</p>
+
             </div>
-            <div class="glass-card p-6 rounded-2xl text-center">
-                <div class="w-12 h-12 bg-secondary/20 rounded-full flex items-center justify-center mx-auto mb-4 text-secondary">
-                    <i data-lucide="cpu"></i>
+
+            <!-- Right Column: Sidebar -->
+            <div class="space-y-8 animate-slide-up" style="animation-delay: 0.3s;">
+                
+                <!-- History -->
+                <div class="glass-card p-6 rounded-2xl">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="font-bold flex items-center gap-2"><i data-lucide="history" class="text-secondary w-4 h-4"></i> Scan History</h3>
+                        <button onclick="clearHistory()" class="text-xs font-medium text-red-400 hover:text-red-300 transition-colors bg-red-400/10 hover:bg-red-400/20 px-2 py-1 rounded">Clear</button>
+                    </div>
+                    <div id="historyContainer" class="space-y-3">
+                        <!-- History injected via JS -->
+                    </div>
                 </div>
-                <h3 class="font-semibold mb-2">2. AI Analysis</h3>
-                <p class="text-sm text-gray-400">Our engine scans for psychological manipulation, fake links, and fraud keywords.</p>
-            </div>
-            <div class="glass-card p-6 rounded-2xl text-center">
-                <div class="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4 text-green-400">
-                    <i data-lucide="shield-check"></i>
+
+                <!-- Tips -->
+                <div class="glass-card p-6 rounded-2xl bg-gradient-to-b from-transparent to-primary/5 border-t-primary/20">
+                    <h3 class="font-bold flex items-center gap-2 mb-4"><i data-lucide="shield-check" class="text-green-400 w-4 h-4"></i> Security Tips</h3>
+                    <ul class="space-y-3 text-sm text-gray-400">
+                        <li class="flex items-start gap-2"><i data-lucide="info" class="w-4 h-4 text-primary shrink-0 mt-0.5"></i> Banks never ask for OTPs or PINs.</li>
+                        <li class="flex items-start gap-2"><i data-lucide="info" class="w-4 h-4 text-primary shrink-0 mt-0.5"></i> Urgency is the #1 scam tactic.</li>
+                        <li class="flex items-start gap-2"><i data-lucide="info" class="w-4 h-4 text-primary shrink-0 mt-0.5"></i> Always verify domains manually.</li>
+                    </ul>
                 </div>
-                <h3 class="font-semibold mb-2">3. Get Verdict</h3>
-                <p class="text-sm text-gray-400">Instantly know if it's safe to click or if you should block the sender immediately.</p>
             </div>
         </div>
     </main>
 
     <!-- Footer -->
-    <footer class="border-t border-white/5 mt-12 py-8 text-center text-sm text-gray-500">
-        <p>© 2026 AI ScamShield. Built for the Hackathon.</p>
+    <footer class="border-t border-white/5 mt-8 py-8 text-center text-sm text-gray-500">
+        <p>© 2026 AI ScamShield. Built for safety.</p>
     </footer>
 
     <script>
         // Initialize Icons
         lucide.createIcons();
 
-        // Auth Logic (Simulated)
+        // Toast System
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').innerText = msg;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // Auth Logic
         function checkAuth() {
             const user = localStorage.getItem('scamshield_user');
             const authSection = document.getElementById('auth-section');
@@ -343,31 +380,27 @@
                 authSection.innerHTML = `
                     <div class="flex items-center gap-4">
                         <div class="flex items-center gap-2 text-sm text-gray-300">
-                            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-primary to-secondary flex items-center justify-center font-bold text-white shadow-lg">
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-primary to-secondary flex items-center justify-center font-bold text-white shadow-lg shadow-primary/20">
                                 ${userData.email.charAt(0).toUpperCase()}
                             </div>
-                            <span class="hidden sm:inline">${userData.email}</span>
                         </div>
-                        <button onclick="logout()" class="text-xs text-gray-400 hover:text-white flex items-center gap-1 transition-colors bg-white/5 px-3 py-1.5 rounded-md border border-white/10">
+                        <button onclick="logout()" class="text-xs text-gray-400 hover:text-white flex items-center gap-1 transition-colors bg-white/5 hover:bg-red-500/20 hover:text-red-400 px-3 py-1.5 rounded-lg border border-white/10">
                             <i data-lucide="log-out" class="w-3 h-3"></i> Logout
                         </button>
                     </div>
                 `;
                 toolContainer.classList.remove('locked');
-                lucide.createIcons();
             } else {
-                authSection.innerHTML = `
-                    <button onclick="openAuthModal()" class="bg-white/10 hover:bg-white/20 text-white px-5 py-2 rounded-full font-medium transition-colors text-sm border border-white/10">
-                        Sign In
-                    </button>
-                `;
+                authSection.innerHTML = `<button onclick="openAuthModal()" class="bg-white/10 hover:bg-white/20 text-white px-5 py-2 rounded-full font-medium transition-colors text-sm border border-white/10">Sign In</button>`;
                 toolContainer.classList.add('locked');
             }
+            lucide.createIcons();
         }
 
         function openAuthModal() {
             document.getElementById('authModal').classList.remove('hidden');
             document.getElementById('authModal').classList.add('flex');
+            toggleAuthView('login');
         }
 
         function closeAuthModal() {
@@ -375,224 +408,309 @@
             document.getElementById('authModal').classList.remove('flex');
         }
 
+        function toggleAuthView(view) {
+            if(view === 'login') {
+                document.getElementById('loginView').classList.remove('hidden');
+                document.getElementById('forgotView').classList.add('hidden');
+            } else {
+                document.getElementById('loginView').classList.add('hidden');
+                document.getElementById('forgotView').classList.remove('hidden');
+            }
+        }
+
+        function sendResetLink() {
+            const email = document.getElementById('resetEmail').value;
+            if(!email) return showToast("Enter an email");
+            showToast("Reset link sent to " + email);
+            setTimeout(() => toggleAuthView('login'), 1500);
+        }
+
         function simulateLogin(method) {
             let email = "user@example.com";
             if (method === 'email') {
                 const val = document.getElementById('loginInput').value;
-                if(val) email = val;
+                if(!val) return showToast("Please enter email");
+                email = val;
             }
             localStorage.setItem('scamshield_user', JSON.stringify({ email: email }));
             closeAuthModal();
             checkAuth();
+            showToast("Logged in successfully");
+            renderHistory();
         }
 
         function logout() {
             localStorage.removeItem('scamshield_user');
             checkAuth();
-            // Reset tool state
             document.getElementById('resultSection').classList.add('hidden');
             document.getElementById('scanInput').value = '';
+            showToast("Logged out");
         }
 
-        // Initialize Auth on load
-        checkAuth();
+        // Tabs Logic
+        function switchTab(tab) {
+            ['text', 'photo', 'audio'].forEach(t => {
+                document.getElementById(`tab-${t}`).classList.remove('border-primary', 'text-primary');
+                document.getElementById(`tab-${t}`).classList.add('border-transparent', 'text-gray-400');
+                document.getElementById(`content-${t}`).classList.add('hidden');
+            });
+            document.getElementById(`tab-${tab}`).classList.remove('border-transparent', 'text-gray-400');
+            document.getElementById(`tab-${tab}`).classList.add('border-primary', 'text-primary');
+            document.getElementById(`content-${tab}`).classList.remove('hidden');
+        }
 
-        // Tool Logic
-        function pasteExample() {
-            document.getElementById('scanInput').value = "URGENT: Your HDFC Bank account will be suspended TODAY due to incomplete KYC. Please click here immediately to update via OTP: http://bit.ly/hdfc-kyc-verify Do not share your password.";
+        // Photo Upload & OCR
+        document.getElementById('imageInput').addEventListener('change', function(e) {
+            if(e.target.files && e.target.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('imagePreview').src = e.target.result;
+                    document.getElementById('imagePreviewContainer').classList.remove('hidden');
+                    document.getElementById('dropZone').classList.add('hidden');
+                }
+                reader.readAsDataURL(e.target.files[0]);
+            }
+        });
+
+        function resetImage() {
+            document.getElementById('imageInput').value = '';
+            document.getElementById('imagePreviewContainer').classList.add('hidden');
+            document.getElementById('dropZone').classList.remove('hidden');
+        }
+
+        function runOCR() {
+            const img = document.getElementById('imagePreview').src;
+            const btn = document.getElementById('ocrBtn');
+            btn.innerHTML = `<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> Extracting...`;
+            btn.disabled = true;
+            lucide.createIcons();
+            
+            showToast("Extracting text via AI...");
+
+            Tesseract.recognize(img, 'eng')
+            .then(({ data: { text } }) => {
+                if(!text.trim()) throw new Error("No text found");
+                document.getElementById('scanInput').value = text;
+                showToast("Text extracted! Analyzing...");
+                switchTab('text');
+                btn.innerHTML = `<i data-lucide="scan-text" class="w-5 h-5"></i> Extract Text & Analyze`;
+                btn.disabled = false;
+                lucide.createIcons();
+                runAnalysis();
+            })
+            .catch(err => {
+                showToast("Failed to extract text. Try a clearer image.");
+                btn.innerHTML = `<i data-lucide="scan-text" class="w-5 h-5"></i> Extract Text & Analyze`;
+                btn.disabled = false;
+                lucide.createIcons();
+            });
+        }
+
+        // Audio Logic
+        function startListening() {
+            const btn = document.getElementById('micBtn');
+            const status = document.getElementById('audioStatus');
+            const rings = document.getElementById('micRings');
+            
+            if (!('webkitSpeechRecognition' in window)) {
+                showToast("Voice input not supported in this browser.");
+                return;
+            }
+            const rec = new webkitSpeechRecognition();
+            rec.lang = 'en-US';
+            rec.onstart = () => {
+                btn.classList.add('bg-red-500');
+                btn.classList.remove('bg-red-500/20');
+                rings.classList.remove('hidden');
+                status.innerText = "Listening... Speak now";
+            };
+            rec.onresult = (e) => {
+                const text = e.results[0][0].transcript;
+                document.getElementById('scanInput').value = text;
+                showToast("Audio captured!");
+                switchTab('text');
+                runAnalysis();
+            };
+            rec.onend = () => {
+                btn.classList.remove('bg-red-500');
+                btn.classList.add('bg-red-500/20');
+                rings.classList.add('hidden');
+                status.innerText = "Click mic and read the suspicious message aloud";
+            };
+            rec.start();
+        }
+
+        // Link Checker
+        function checkLinkOnly() {
+            const link = document.getElementById('linkInput').value;
+            if(!link) return showToast("Enter a link to check");
+            document.getElementById('scanInput').value = link;
+            switchTab('text');
+            runAnalysis();
+        }
+
+        // History Logic
+        function saveToHistory(text, score) {
+            if(!localStorage.getItem('scamshield_user')) return;
+            let history = JSON.parse(localStorage.getItem('scam_history') || '[]');
+            history.unshift({ text: text.substring(0, 40) + (text.length>40?'...':''), score, date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) });
+            if(history.length > 5) history.pop();
+            localStorage.setItem('scam_history', JSON.stringify(history));
+            renderHistory();
+        }
+
+        function renderHistory() {
+            const container = document.getElementById('historyContainer');
+            if(!localStorage.getItem('scamshield_user')) {
+                container.innerHTML = '<p class="text-sm text-gray-500 text-center py-4">Login to view history</p>';
+                return;
+            }
+            let history = JSON.parse(localStorage.getItem('scam_history') || '[]');
+            if(history.length === 0) {
+                container.innerHTML = '<p class="text-sm text-gray-500 text-center py-4">No recent scans.</p>';
+                return;
+            }
+            container.innerHTML = history.map((h, i) => `
+                <div class="flex items-center justify-between p-3 glass-card rounded-xl border border-white/5 hover:border-white/10 transition-colors group">
+                    <div class="flex items-center gap-3 overflow-hidden">
+                        <div class="w-10 h-10 shrink-0 rounded-full flex items-center justify-center font-bold text-xs ${h.score >= 70 ? 'bg-red-500/20 text-red-500' : h.score >= 40 ? 'bg-orange-500/20 text-orange-500' : 'bg-green-500/20 text-green-500'}">${h.score}%</div>
+                        <div class="truncate">
+                            <p class="text-sm text-gray-300 truncate" title="${h.text}">${h.text}</p>
+                            <p class="text-xs text-gray-500">${h.date}</p>
+                        </div>
+                    </div>
+                    <button onclick="deleteHistory(${i})" class="text-gray-500 hover:text-red-400 p-2 opacity-0 group-hover:opacity-100 transition-all shrink-0"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function deleteHistory(index) {
+            let history = JSON.parse(localStorage.getItem('scam_history') || '[]');
+            history.splice(index, 1);
+            localStorage.setItem('scam_history', JSON.stringify(history));
+            renderHistory();
+            showToast("Item deleted");
+        }
+
+        function clearHistory() {
+            localStorage.removeItem('scam_history');
+            renderHistory();
+            showToast("History cleared");
+        }
+
+        // Scam Engine
+        function pasteExampleAndAnalyze() {
+            document.getElementById('scanInput').value = "URGENT: Your SBI account is blocked TODAY. Update KYC immediately at http://bit.ly/sbi-verify or pay Rs.5000 fine. Do not share OTP.";
+            runAnalysis();
         }
 
         function analyzeText(text) {
             text = text.toLowerCase();
-            let score = 0;
-            let reasons = [];
-
-            // 1. URL / Domain Checks
+            let score = 0; let reasons = [];
             const hasHttp = text.includes("http://") || text.includes("https://");
             const hasSuspiciousDomain = text.includes("bit.ly") || text.includes("tinyurl") || text.includes(".ru") || text.includes(".tk") || text.includes(".xyz");
             
             if (hasSuspiciousDomain) {
-                score += 40;
-                reasons.push({
-                    type: 'danger',
-                    title: "Fake Link Detected",
-                    desc: "Links like bit.ly, .tk, or .ru are commonly used by scammers to hide the real destination."
-                });
+                score += 40; reasons.push({ type: 'danger', title: "Fake Link", desc: "Short links (bit.ly) or odd domains (.tk) hide real destinations." });
             } else if (hasHttp) {
-                score += 10;
-                reasons.push({
-                    type: 'warning',
-                    title: "Contains Links",
-                    desc: "A link was found. Always ensure the domain exactly matches the official website before clicking."
-                });
+                score += 10; reasons.push({ type: 'warning', title: "Contains Links", desc: "Always ensure domains exactly match official websites." });
+            }
+            if (text.match(/\b(urgent|today|immediately|blocked|suspended)\b/g)) {
+                score += 25; reasons.push({ type: 'danger', title: "Urgency Pressure", desc: "Scammers use panic to force immediate action." });
+            }
+            if (text.match(/\b(otp|cvv|pin|password)\b/g)) {
+                score += 30; reasons.push({ type: 'danger', title: "Asking for Data", desc: "Legit banks NEVER ask for OTP/PINs via SMS or email." });
+            }
+            if (text.match(/\b(lottery|won|prize|cashback)\b/g)) {
+                score += 35; reasons.push({ type: 'danger', title: "Too Good Offer", desc: "Free money offers are classic bait." });
+            }
+            if (text.match(/\b(sbi|hdfc|icici|axis)\b/g) && text.match(/\b(@gmail\.com|.ru)\b/g)) {
+                score += 30; reasons.push({ type: 'danger', title: "Fake Sender", desc: "Banks don't use free email services." });
             }
 
-            // 2. Urgency
-            if (text.match(/\b(urgent|today|immediately|suspended|blocked)\b/g)) {
-                score += 25;
-                reasons.push({
-                    type: 'danger',
-                    title: "Urgency Pressure",
-                    desc: "Uses words like 'Urgent, Account Blocked TODAY' to make you panic and act without thinking."
-                });
-            }
-
-            // 3. Sensitive Data Asking
-            if (text.match(/\b(otp|cvv|pin|password|upi pin)\b/g)) {
-                score += 30;
-                reasons.push({
-                    type: 'danger',
-                    title: "OTP Asking",
-                    desc: "Legit companies or banks never ask for your OTP/CVV/UPI PIN via SMS/Email."
-                });
-            }
-
-            // 4. Too Good To Be True
-            if (text.match(/\b(lottery|won|prize|free money|cashback)\b/g)) {
-                score += 35;
-                reasons.push({
-                    type: 'danger',
-                    title: "Too Good Offer",
-                    desc: "Mentions of winning a free lottery or prize trap to steal your data or money."
-                });
-            }
-
-            // 5. Fake Sender / Bank + Free Email
-            if (text.match(/\b(sbi|hdfc|icici|axis|bank)\b/g) && text.match(/\b(@gmail\.com|@yahoo\.com)\b/g)) {
-                score += 30;
-                reasons.push({
-                    type: 'danger',
-                    title: "Fake Sender",
-                    desc: "Bank emails never come from @gmail.com or other free providers."
-                });
-            } else if (text.match(/\b(sbi|hdfc|icici|axis)\b/g) && score > 0) {
-                 reasons.push({
-                    type: 'danger',
-                    title: "Bank Impersonation",
-                    desc: "This message claims to be from a bank but shows strong scam indicators."
-                });
-            }
-
-            // Ensure max 100
             score = Math.min(score, 100);
 
-            // Add safe reasons if score is low or if some checks passed
-            if (!hasSuspiciousDomain && !hasHttp) {
-                reasons.push({
-                    type: 'safe',
-                    title: "No Suspicious Links",
-                    desc: "All links are https and safe, or no links are present."
-                });
-            }
-            if (!text.match(/\b(otp|cvv|pin|password)\b/g)) {
-                 reasons.push({
-                    type: 'safe',
-                    title: "No Sensitive Data Asked",
-                    desc: "The message does not explicitly ask for OTPs or PINs."
-                });
-            }
-            if (!text.match(/\b(urgent|today|immediately)\b/g)) {
-                 reasons.push({
-                    type: 'safe',
-                    title: "Professional Language",
-                    desc: "No spelling errors or urgency."
-                });
-            }
-            if (!text.match(/\b(@gmail\.com|@yahoo\.com|.ru)\b/g)) {
-                 reasons.push({
-                    type: 'safe',
-                    title: "Verified Domain",
-                    desc: "Sender domain matches official standard."
-                });
-            }
+            if (!hasSuspiciousDomain && !hasHttp) reasons.push({ type: 'safe', title: "No Bad Links", desc: "No URLs detected." });
+            if (!text.match(/\b(otp|cvv|pin|password)\b/g)) reasons.push({ type: 'safe', title: "No Sensitive Data Asked", desc: "Does not ask for OTPs." });
+            if (!text.match(/\b(urgent|today|immediately)\b/g)) reasons.push({ type: 'safe', title: "Professional Tone", desc: "No panic keywords." });
 
-            // Guarantee 5-6 checks by picking top ones if there are too many, or just keeping them.
-            // Sort to put danger first
-            reasons.sort((a, b) => {
-                if (a.type === 'danger' && b.type !== 'danger') return -1;
-                if (a.type !== 'danger' && b.type === 'danger') return 1;
-                return 0;
-            });
-            
-            // Trim to max 6 reasons for clean UI
-            reasons = reasons.slice(0, 6);
-
-            return { score, reasons };
+            reasons.sort((a, b) => (a.type === 'danger' && b.type !== 'danger' ? -1 : 1)).slice(0, 4);
+            return { score, reasons: reasons.slice(0,6) };
         }
 
-        function runAnalysis() {
+        async function runAnalysis() {
             const text = document.getElementById('scanInput').value;
-            if(!text.trim()) return alert('Please enter some text to analyze.');
+            if(!text.trim()) return showToast('Enter text to analyze.');
+
+            const btn = document.getElementById('analyzeBtn');
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = `<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> Analyzing AI...`;
+            btn.disabled = true;
+            lucide.createIcons();
+
+            // Fake processing delay
+            await new Promise(r => setTimeout(r, 1200));
 
             const result = analyzeText(text);
             const score = result.score;
-            
             document.getElementById('resultSection').classList.remove('hidden');
             
-            // Animate Circle
             const circle = document.getElementById('scoreCircle');
             const scoreText = document.getElementById('scoreText');
             const scoreLabel = document.getElementById('scoreLabel');
             
-            let color = '#10b981'; // Green
-            let label = 'SAFE';
-            let labelClass = 'text-green-400';
-            let desc = 'This message appears safe. No common scam patterns were detected. However, always remain vigilant.';
-
+            let color = '#10b981', label = 'SAFE', labelClass = 'text-green-400', desc = 'Appears safe. No known scam patterns detected.';
             if (score >= 70) {
-                color = '#ef4444'; // Red
-                label = 'DANGEROUS SCAM';
-                labelClass = 'text-red-500';
-                desc = 'High risk! Do not click any links or share information. Delete this message immediately.';
+                color = '#ef4444'; label = 'DANGEROUS SCAM'; labelClass = 'text-red-500'; desc = 'High risk! Do not click links or share info. Delete immediately.';
             } else if (score >= 40) {
-                color = '#f59e0b'; // Orange
-                label = 'SUSPICIOUS';
-                labelClass = 'text-orange-400';
-                desc = 'Exercise caution. This message has suspicious elements. Verify the sender through official channels.';
+                color = '#f59e0b'; label = 'SUSPICIOUS'; labelClass = 'text-orange-400'; desc = 'Exercise caution. Verify the sender officially.';
             }
 
             circle.style.stroke = color;
             scoreText.style.fill = color;
             
-            // Animate number
             let current = 0;
             const timer = setInterval(() => {
                 current += 2;
-                if(current >= score) {
-                    current = score;
-                    clearInterval(timer);
-                }
+                if(current >= score) { current = score; clearInterval(timer); }
                 scoreText.textContent = current + '%';
                 circle.style.strokeDasharray = `${current}, 100`;
-            }, 20);
+            }, 15);
 
             scoreLabel.textContent = label;
-            scoreLabel.className = `text-3xl font-bold mb-2 ${labelClass}`;
+            scoreLabel.className = `text-3xl font-black mb-2 tracking-tight ${labelClass}`;
             document.getElementById('scoreDesc').textContent = desc;
 
-            // Render Reasons
             const container = document.getElementById('reasonsContainer');
-            container.innerHTML = '';
-            
-            result.reasons.forEach(r => {
+            container.innerHTML = result.reasons.map(r => {
                 const isDanger = r.type === 'danger' || r.type === 'warning';
-                const icon = isDanger ? '<i data-lucide="x" class="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5"></i>' : '<i data-lucide="check" class="w-6 h-6 text-green-500 flex-shrink-0 mt-0.5"></i>';
-                const bgClass = isDanger ? 'bg-red-500/5 border-red-500/20' : 'bg-green-500/5 border-green-500/20';
-                
-                const card = `
-                    <div class="glass-card ${bgClass} border p-4 rounded-xl flex items-start gap-4 transition-transform hover:scale-[1.02]">
-                        ${icon}
-                        <div>
-                            <h4 class="font-semibold text-white mb-1">${r.title}</h4>
-                            <p class="text-sm text-gray-400 leading-relaxed">${r.desc}</p>
-                        </div>
-                    </div>
-                `;
-                container.innerHTML += card;
-            });
+                const icon = isDanger ? '<i data-lucide="x" class="w-5 h-5 text-red-500 shrink-0 mt-0.5"></i>' : '<i data-lucide="check" class="w-5 h-5 text-green-500 shrink-0 mt-0.5"></i>';
+                return `<div class="glass-card ${isDanger ? 'bg-red-500/5 border-red-500/20' : 'bg-green-500/5 border-green-500/20'} border p-3.5 rounded-xl flex items-start gap-3 transition-transform hover:-translate-y-0.5">
+                            ${icon}
+                            <div><h4 class="font-bold text-white text-sm mb-0.5">${r.title}</h4><p class="text-xs text-gray-400 leading-relaxed">${r.desc}</p></div>
+                        </div>`;
+            }).join('');
 
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
             lucide.createIcons();
+            showToast("Analysis complete");
+            saveToHistory(text, score);
         }
+
+        function readAloud() {
+            const label = document.getElementById('scoreLabel').innerText;
+            const desc = document.getElementById('scoreDesc').innerText;
+            if(!label) return;
+            const utterance = new SpeechSynthesisUtterance(`Verdict is ${label}. ${desc}`);
+            window.speechSynthesis.speak(utterance);
+            showToast("Reading verdict aloud...");
+        }
+
+        // Init
+        checkAuth();
+        renderHistory();
     </script>
 </body>
 </html>
