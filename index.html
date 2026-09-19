@@ -12,6 +12,19 @@
         <p>AI-Powered Scam & Phishing Detection Platform</p>
         <textarea id="inputText" placeholder="Paste suspicious link, email, SMS or UPI message here..."></textarea>
         <button onclick="checkScam()">Scan Now</button>
+        
+        <div class="extra-tools" style="margin-top: 15px; padding: 15px; background: #0f172a; border-radius: 10px;">
+            <h4 style="margin-top: 0;">🎙️ Voice Input</h4>
+            <select id="langSelect" style="padding: 5px; margin-bottom: 10px; border-radius: 5px;">
+                <option value="mr-IN">Marathi (mr-IN)</option>
+                <option value="hi-IN">Hindi (hi-IN)</option>
+            </select>
+            <button onclick="startVoice()" style="background: #ef4444; margin-bottom: 15px;">🎤 Speak Now</button>
+            
+            <h4>📷 QR Fraud Scanner</h4>
+            <input type="file" id="qrInput" accept="image/*" style="margin-bottom: 10px; font-size: 14px;">
+            <canvas id="qrCanvas" style="display: none;"></canvas>
+        </div>
         <div id="result"></div>
         <div class="features">
             <h3>Features:</h3>
@@ -21,6 +34,7 @@
             <li>🤖 AI Risk Score (0-100)</li>
         </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <script src="script.js"></script>
 </body>
 
